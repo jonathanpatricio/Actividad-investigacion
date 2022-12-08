@@ -39,9 +39,6 @@ base <- Pob(b  = c(-0.55608, 0.37697, 0.10030, 0.05444), # Vector que contiene l
             N = 10000)                                   # Tamaño de la población a simular
 
 
-
-
-
 comp_modelos <- function(base, n, repeticiones){
   # Semilla para fijar los resultados
   set.seed(16)
@@ -122,5 +119,30 @@ comp_modelos <- function(base, n, repeticiones){
     
   }
   
+  #Base de datos para 2 tratamientos
+  R2_Poisson    <- as.matrix(apply(X = R2_Poisson,      MARGIN = 1, FUN = mean))
+  R2_Logistico  <- as.matrix(apply(X = R2_Logistico,    MARGIN = 1, FUN = mean))
+  
+  AUC_Poisson   <- as.matrix(apply(X = AUC_Poisson,     MARGIN = 1, FUN = mean))
+  AUC_Logistico <- as.matrix(apply(X = AUC_Logistico,   MARGIN = 1, FUN = mean))
+
+  
+  Base <- as.data.frame(cbind(n = n))
+  
+  Base <- mutate(Base,R2_Poisson)
+  Base <- mutate(Base,R2_Logistico)
+  Base <- mutate(Base,AUC_Poisson)
+  Base <- mutate(Base,AUC_Logistico)
+
+  # Capturando la hora de término del la función
+  Fin <- DescTools::Now()
+  
+  # Calculando la duración
+  Duración <- Fin - Inicio; print(Duración)
+  
+  # Retornando los resultados
+  return(Resultados = Base)
+  
 }
 
+Comparaciones <- comp_modelos(base = base, n = c(1000), repeticiones = 100)
