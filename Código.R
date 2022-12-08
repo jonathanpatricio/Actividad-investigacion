@@ -42,29 +42,85 @@ base <- Pob(b  = c(-0.55608, 0.37697, 0.10030, 0.05444), # Vector que contiene l
 
 
 
-m1 <- glm(formula = numerolesiones ~ educmad + sexo + estcivil + estrato, data = datos, family="poisson")
-summary(m1)
-# m2 <- glm(formula = numerolesiones_2 ~ educmad + sexo + estcivil + estrato, data = datos, family="poisson")
-cov.m1 <- vcovHC(m1, type="HC0")
-std.err <- sqrt(diag(cov.m1))
-# stargazer(m1,m2, type = "text")
+comp_modelos <- function(base, n, repeticiones){
+  # Semilla para fijar los resultados
+  set.seed(16)
+  
+  # Capturando la hora de inicio del la función
+  Inicio <- DescTools::Now()
+  
+  # Librerías que utiliza la función
+  library(sandwich)
+  library(DescTools)
+  library(doParallel)
+  library(parallel)
+  library(cutpointr)
+  
+  # Matrices que guardarán los resultados de las hipótesis planteadas para 2 y 3 tratamientos
+  R2_Poisson   <- matrix(0,length(n),repeticiones)
+  R2_Logistico <- matrix(0,length(n),repeticiones)
+  
+  Brier_Poisson   <- matrix(0,length(n),repeticiones)
+  Brier_Logistico <- matrix(0,length(n),repeticiones)
+  
+  AUC_Poisson   <- matrix(0,length(n),repeticiones)
+  AUC_Logistico <- matrix(0,length(n),repeticiones)
+  
+  
+  
+  # Bucle
+  for (i in 1:length(n)){for (j in 1:repeticiones) {
 
-datos$fitted_1 <- predict(m1,type=c("response"), dispersion = std.err)
-datos$fitted_2 <- predict(m1,type=c("response"))
-
-
-
-
-# Ajuntando el modelo logistico
-
-
-
-
-
-
-
-
-
-
-
+      # Obteniendo la muestra
+      sample <- base[sample(x = 1:nrow(base), size = n[[i]], replace = FALSE),]
+      
+      # Ajustando los modelos
+      Poisson   <- glm(formula = y_dic ~ ., data = sample, family = "poisson")
+      std.err   <- sqrt(diag(vcovHC(Poisson, type="HC0"))) # Errores estándar robustos del modelo de Poisson
+      Logistico <- glm(formula = y_dic ~ ., data = sample, family = binomial(link = "logit"))
+      
+      
+      
+      #Evaluando el rendimiento global de los modelos
+      # R2 Nagelkerke obtenidos en ambos modelos 
+      R2_Poisson   [i,j] <- PseudoR2(Poisson,   which = "Nagelkerke")
+      R2_Logistico [i,j] <- PseudoR2(Logistico, which = "Nagelkerke")
+      
+      # Brier score
+      Brier_Poisson   [i,j] <- 0
+      Brier_Logistico [i,j] <- 0
+      
+      # Evaluando la discriminación de los modelos
+      sample$Poisson <- predict(Poisson, type=c("response"))
+      sample$Logistico <- predict(Logistico, type=c("response"))
+      
+      cut_point_Poisson <- cutpointr(sample,                     # base de datos con la que trabajo
+                                     Poisson,                    #variable que guarda las predicciones del modelo
+                                     y_dic,                      # variable dependiente convertida como numérica
+                                     direction = ">=", 
+                                     pos_class = 0,              # valores en mi variable observada un caso positivo
+                                     neg_class = 1,              # valores en mi variable observada un caso negativo
+                                     method = maximize_metric,   # Metodo para maximizar (se)
+                                     metric = youden)            # youden = sensitivity + specificity - 1
+      
+      cut_point_Logistico <- cutpointr(sample,                   # base de datos con la que trabajo
+                                       Logistico,                #variable que guarda las predicciones del modelo
+                                       y_dic,                    # variable dependiente convertida como numérica
+                                       direction = ">=", 
+                                       pos_class = 0,            # valores en mi variable observada un caso positivo
+                                       neg_class = 1,            # valores en mi variable observada un caso negativo
+                                       method = maximize_metric, # Metodo para maximizar (se)
+                                       metric = youden)          # youden = sensitivity + specificity - 1
+        
+      # AUC Roc curve
+      AUC_Poisson   [i,j] <- cut_point_Poisson$AUC
+      AUC_Logistico [i,j] <- cut_point_Logistico$AUC
+    
+      print(c(n[[i]],j))
+      
+    }
+    
+  }
+  
+}
 
