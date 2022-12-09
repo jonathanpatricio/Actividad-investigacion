@@ -39,6 +39,7 @@ base <- Pob(b  = c(-0.55608, 0.37697, 0.10030, 0.05444), # Vector que contiene l
             N = 10000)                                   # Tamaño de la población a simular
 
 
+
 comp_modelos <- function(base, n, repeticiones){
   # Semilla para fijar los resultados
   set.seed(16)
@@ -49,9 +50,10 @@ comp_modelos <- function(base, n, repeticiones){
   # Librerías que utiliza la función
   library(sandwich)
   library(DescTools)
-  library(doParallel)
-  library(parallel)
   library(cutpointr)
+  library(caret)
+  library(rms)
+  library(generalhoslem)
   
   # Matrices que guardarán los resultados de las hipótesis planteadas para 2 y 3 tratamientos
   R2_Poisson   <- matrix(0,length(n),repeticiones)
@@ -63,6 +65,20 @@ comp_modelos <- function(base, n, repeticiones){
   AUC_Poisson   <- matrix(0,length(n),repeticiones)
   AUC_Logistico <- matrix(0,length(n),repeticiones)
   
+  Se_Poisson   <- matrix(0,length(n),repeticiones)
+  Se_Logistico <- matrix(0,length(n),repeticiones)
+  
+  Es_Poisson   <- matrix(0,length(n),repeticiones)
+  Es_Logistico <- matrix(0,length(n),repeticiones)
+  
+  VPP_Poisson   <- matrix(0,length(n),repeticiones)
+  VPP_Logistico <- matrix(0,length(n),repeticiones)
+  
+  VPN_Poisson   <- matrix(0,length(n),repeticiones)
+  VPN_Logistico <- matrix(0,length(n),repeticiones)
+  
+  HL_test_poisson  <- matrix(0,length(n),repeticiones)
+  HL_test_logistic <- matrix(0,length(n),repeticiones)
   
   
   # Bucle
@@ -76,64 +92,126 @@ comp_modelos <- function(base, n, repeticiones){
       std.err   <- sqrt(diag(vcovHC(Poisson, type="HC0"))) # Errores estándar robustos del modelo de Poisson
       Logistico <- glm(formula = y_dic ~ ., data = sample, family = binomial(link = "logit"))
       
+      # Evaluando la discriminación de los modelos
+      sample$Poisson   <- predict(Poisson,   type = c("response")) # Obteniendo las predicciones para el modelo Poisson
+      sample$Logistico <- predict(Logistico, type = c("response")) # Obteniendo las predicciones para el modelo Logístico 
       
+      cut_point_Poisson <- cutpointr(sample,                     # base de datos con la que se construyó el modelo 
+                                     Poisson,                    # variable que guarda las predicciones del modelo
+                                     y_dic,                      # variable dependiente convertida como numérica
+                                     direction = ">=", 
+                                     pos_class = 1,              # valores en mi variable observada un caso positivo
+                                     neg_class = 0,              # valores en mi variable observada un caso negativo
+                                     method = maximize_metric,   # Método para maximizar (se)
+                                     metric = youden)            # youden = sensitivity + specificity - 1
+      
+      cut_point_Logistico <- cutpointr(sample,                   # base de datos con la que se construyó el modelo 
+                                       Logistico,                # variable que guarda las predicciones del modelo
+                                       y_dic,                    # variable dependiente convertida como numérica
+                                       direction = ">=", 
+                                       pos_class = 1,            # valores en mi variable observada un caso positivo
+                                       neg_class = 0,            # valores en mi variable observada un caso negativo
+                                       method = maximize_metric, # Metodo para maximizar (se)
+                                       metric = youden)          # youden = sensitivity + specificity - 1
+        
+      
+      # AUC Roc curve
+      AUC_Poisson   [i,j] <- cut_point_Poisson$AUC
+      AUC_Logistico [i,j] <- cut_point_Logistico$AUC
+      
+      # Resultados de la matriz de confusión 
+      sample$Poisson_dic   <- as.numeric(if_else(condition = sample$Poisson   >= cut_point_Poisson$optimal_cutpoint, true = 1, false = 0 ))
+      sample$Logistico_dic <- as.numeric(if_else(condition = sample$Logistico >= cut_point_Logistico$optimal_cutpoint, true = 1, false = 0 ))
+      
+      Conf_matriz_poisson  <-  confusionMatrix(as.factor(sample$Poisson_dic),   as.factor(sample$y_dic), positive = "1")
+      Conf_matriz_logistic <-  confusionMatrix(as.factor(sample$Logistico_dic), as.factor(sample$y_dic), positive = "1")
+      
+      Se_Poisson    [i,j] <- as.matrix(Conf_matriz_poisson$byClass)[1,1]
+      Se_Logistico  [i,j] <- as.matrix(Conf_matriz_logistic$byClass)[1,1]
+      
+      Es_Poisson    [i,j] <- as.matrix(Conf_matriz_poisson$byClass)[2,1]
+      Es_Logistico  [i,j] <- as.matrix(Conf_matriz_logistic$byClass)[2,1]
+      
+      VPP_Poisson   [i,j] <- as.matrix(Conf_matriz_poisson$byClass)[3,1]
+      VPP_Logistico [i,j] <- as.matrix(Conf_matriz_logistic$byClass)[3,1]
+      
+      VPN_Poisson   [i,j] <- as.matrix(Conf_matriz_poisson$byClass)[4,1]
+      VPN_Logistico [i,j] <- as.matrix(Conf_matriz_logistic$byClass)[4,1]
       
       #Evaluando el rendimiento global de los modelos
+      
       # R2 Nagelkerke obtenidos en ambos modelos 
       R2_Poisson   [i,j] <- PseudoR2(Poisson,   which = "Nagelkerke")
       R2_Logistico [i,j] <- PseudoR2(Logistico, which = "Nagelkerke")
       
       # Brier score
-      Brier_Poisson   [i,j] <- 0
-      Brier_Logistico [i,j] <- 0
+      Brier_Poisson   [i,j] <- BrierScore(resp = sample$y_dic, pred = sample$Poisson, scaled = TRUE)
+      Brier_Logistico [i,j] <- BrierScore(resp = sample$y_dic, pred = sample$Logistico, scaled = TRUE)
       
-      # Evaluando la discriminación de los modelos
-      sample$Poisson <- predict(Poisson, type=c("response"))
-      sample$Logistico <- predict(Logistico, type=c("response"))
-      
-      cut_point_Poisson <- cutpointr(sample,                     # base de datos con la que trabajo
-                                     Poisson,                    #variable que guarda las predicciones del modelo
-                                     y_dic,                      # variable dependiente convertida como numérica
-                                     direction = ">=", 
-                                     pos_class = 0,              # valores en mi variable observada un caso positivo
-                                     neg_class = 1,              # valores en mi variable observada un caso negativo
-                                     method = maximize_metric,   # Metodo para maximizar (se)
-                                     metric = youden)            # youden = sensitivity + specificity - 1
-      
-      cut_point_Logistico <- cutpointr(sample,                   # base de datos con la que trabajo
-                                       Logistico,                #variable que guarda las predicciones del modelo
-                                       y_dic,                    # variable dependiente convertida como numérica
-                                       direction = ">=", 
-                                       pos_class = 0,            # valores en mi variable observada un caso positivo
-                                       neg_class = 1,            # valores en mi variable observada un caso negativo
-                                       method = maximize_metric, # Metodo para maximizar (se)
-                                       metric = youden)          # youden = sensitivity + specificity - 1
-        
-      # AUC Roc curve
-      AUC_Poisson   [i,j] <- cut_point_Poisson$AUC
-      AUC_Logistico [i,j] <- cut_point_Logistico$AUC
+      # Evaluando la calibración en ambos modelos
+      HL_test_poisson  [i,j] <- if((hoslem.test(sample$y_dic, fitted(Poisson),   g = 10)$p.value) < 0.05 ) 1 else 0 
+      HL_test_logistic [i,j] <- if((hoslem.test(sample$y_dic, fitted(Logistico),   g = 10)$p.value) < 0.05 ) 1 else 0
     
+      
+      # Capturando el avance del proceso
       print(c(n[[i]],j))
       
     }
     
   }
   
-  #Base de datos para 2 tratamientos
-  R2_Poisson    <- as.matrix(apply(X = R2_Poisson,      MARGIN = 1, FUN = mean))
-  R2_Logistico  <- as.matrix(apply(X = R2_Logistico,    MARGIN = 1, FUN = mean))
+  # Obteniendo los valores promedios de las comparaciones
+  R2_Poisson    <- as.matrix(apply(X = R2_Poisson,   MARGIN = 1, FUN = mean))
+  R2_Logistico  <- as.matrix(apply(X = R2_Logistico, MARGIN = 1, FUN = mean))
   
-  AUC_Poisson   <- as.matrix(apply(X = AUC_Poisson,     MARGIN = 1, FUN = mean))
-  AUC_Logistico <- as.matrix(apply(X = AUC_Logistico,   MARGIN = 1, FUN = mean))
+  Brier_Poisson    <- as.matrix(apply(X = Brier_Poisson,   MARGIN = 1, FUN = mean))
+  Brier_Logistico  <- as.matrix(apply(X = Brier_Logistico, MARGIN = 1, FUN = mean))
+  
+  AUC_Poisson   <- as.matrix(apply(X = AUC_Poisson,  MARGIN = 1, FUN = mean))
+  AUC_Logistico <- as.matrix(apply(X = AUC_Logistico,MARGIN = 1, FUN = mean))
+  
+  Se_Poisson    <- as.matrix(apply(X = Se_Poisson,   MARGIN = 1, FUN = mean))
+  Se_Logistico  <- as.matrix(apply(X = Se_Logistico, MARGIN = 1, FUN = mean))
+  
+  Es_Poisson    <- as.matrix(apply(X = Es_Poisson,   MARGIN = 1, FUN = mean))
+  Es_Logistico  <- as.matrix(apply(X = Es_Logistico, MARGIN = 1, FUN = mean))
+  
+  VPP_Poisson   <- as.matrix(apply(X = VPP_Poisson,  MARGIN = 1, FUN = mean))
+  VPP_Logistico <- as.matrix(apply(X = VPP_Logistico,MARGIN = 1, FUN = mean))
+  
+  VPN_Poisson   <- as.matrix(apply(X = VPN_Poisson,  MARGIN = 1, FUN = mean))
+  VPN_Logistico <- as.matrix(apply(X = VPN_Logistico,MARGIN = 1, FUN = mean))
+  
+  HL_test_poisson   <- as.matrix(apply(X = HL_test_poisson,  MARGIN = 1, FUN = mean))
+  HL_test_logistic  <- as.matrix(apply(X = HL_test_logistic, MARGIN = 1, FUN = mean))
 
-  
+  # Base de datos con los resultados
   Base <- as.data.frame(cbind(n = n))
   
   Base <- mutate(Base,R2_Poisson)
   Base <- mutate(Base,R2_Logistico)
+  
+  Base <- mutate(Base,Brier_Poisson)
+  Base <- mutate(Base,Brier_Logistico)
+  
   Base <- mutate(Base,AUC_Poisson)
   Base <- mutate(Base,AUC_Logistico)
-
+  
+  Base <- mutate(Base,Se_Poisson)
+  Base <- mutate(Base,Se_Logistico)
+  
+  Base <- mutate(Base,Es_Poisson)
+  Base <- mutate(Base,Es_Logistico)
+  
+  Base <- mutate(Base,VPP_Poisson)
+  Base <- mutate(Base,VPP_Logistico)
+  
+  Base <- mutate(Base,VPN_Poisson)
+  Base <- mutate(Base,VPN_Logistico)
+  
+  Base <- mutate(Base,HL_test_poisson)
+  Base <- mutate(Base,HL_test_logistic)
+  
   # Capturando la hora de término del la función
   Fin <- DescTools::Now()
   
@@ -145,4 +223,4 @@ comp_modelos <- function(base, n, repeticiones){
   
 }
 
-Comparaciones <- comp_modelos(base = base, n = c(1000), repeticiones = 100)
+Comparaciones <- comp_modelos(base = base, n = c(1000, 1500), repeticiones = 100)
