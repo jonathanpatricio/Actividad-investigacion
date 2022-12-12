@@ -9,28 +9,29 @@ Pob <- function(b, sd, tipo, prob, N){
   parametros <- cbind(b,sd,tipo,prob)
   
   # Matriz que guardará el resultado de las covariables
-  covariables <- matrix(0,N,length(b))
-    
+  covariables <- matrix(0, N, length(b))
+  
   # Generando los valores de cada sujeto en la población
   for (i in 1:length(b)) {
-    covariables[,i] <- if(parametros[i,3] == 1){rnorm(n = N, mean = parametros[i,1], sd = parametros[i,2])}else{(rbinom(n = N, size = 1, prob = parametros[i,4])) * (sd = parametros[i,4]) }
+    covariables[,i] <- if(parametros[i,3] == 1){rnorm(n = N, mean = parametros[i,1], sd = parametros[i,2])}else
+    {(rbinom(n = N, size = 1, prob = parametros[i,4])) * (sd = parametros[i,4]) }
   }
   
-  # Obteniendo el valor esparado de cada sujeto
+  # Obteniendo el valor esperado para cada sujeto
   mu <- exp(as.matrix(apply(X = covariables, MARGIN = 1, FUN = sum)))
   
   # Obteniendo la información de conteo para cada sujeto
   y <- rpois(n = N, lambda = mu)
-
-  #Construyendo la base de datos 
-  base <-  as.data.frame(cbind(y, covariables))
+  
+  # Construyendo la base de datos 
+  base <-  as.data.frame(cbind(covariables, y))
   
   # Dicotomizando la variable dependiente
   base$y_dic <- if_else(condition = base$y < 1, true = 0, false = 1)
-  
-  return(base)
-  
-}
+  base_completa <- base
+  base <- base[,-c(length(b)+1)]
+  return(list(base_completa = base_completa, base = base))
+  }
 
 base <- Pob(b  = c(-0.55608, 0.37697, 0.10030, 0.05444), # Vector que contiene los valores con el promedio de cada una de las covariables (variables numericas)
             sd = c(0.16204, 0.15148, 0.02275, 0.01349),  # Vector que contiene los valores con la desviación estandar para cada variable (variables numericas)
