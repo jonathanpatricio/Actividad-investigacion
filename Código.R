@@ -1,4 +1,4 @@
-Pob <- function(b, sd, tipo, prob, N){
+Pob <- function(b, sd, tipo, prob, N, dic){
   # Semilla para fijar los números aleatorios
   set.seed(16)
   
@@ -27,11 +27,18 @@ Pob <- function(b, sd, tipo, prob, N){
   base <-  as.data.frame(cbind(covariables, y))
   
   # Dicotomizando la variable dependiente
-  base$y_dic <- if_else(condition = base$y < 1, true = 0, false = 1)
+  base$y_dic <- if_else(condition = base$y < dic, true = 0, false = 1)
   base_completa <- base
   base <- base[,-c(length(b)+1)]
   return(list(base_completa = base_completa, base = base))
-  }
+}
+
+poblacion <- Pob(b  = c(0.987, 0.097, 0.021, 0.360, 0.173, -0.010, -0.002, 0.231, 0.089, 0.004, 0.009, 0.012), 
+                 sd = c(0.023, 0.038, 0.039, 0.033, 0.029,  0.001,  0.046, 0.046, 0.040, 0.001, 0.001, 0.001), 
+                 tipo = c(1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1 ), 
+                 prob = c(0, 0.208, 0.208, 0.259, 0.613, 0, 0, 0, 0, 0, 0, 0), 
+                 dic = 1,
+                 N  = 5670)
 
 base <- Pob(b  = c(-0.55608, 0.37697, 0.10030, 0.05444), # Vector que contiene los valores con el promedio de cada una de las covariables (variables numericas)
             sd = c(0.16204, 0.15148, 0.02275, 0.01349),  # Vector que contiene los valores con la desviación estandar para cada variable (variables numericas)
