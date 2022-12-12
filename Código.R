@@ -14,7 +14,7 @@ Pob <- function(b, sd, tipo, prob, N, dic){
   # Generando los valores de cada sujeto en la población
   for (i in 1:length(b)) {
     covariables[,i] <- if(parametros[i,3] == 1){rnorm(n = N, mean = parametros[i,1], sd = parametros[i,2])}else
-    {(rbinom(n = N, size = 1, prob = parametros[i,4])) * (sd = parametros[i,4]) }
+    {(rbinom(n = N, size = 1, prob = parametros[i,4])) * (parametros[i,1]) }
   }
   
   # Obteniendo el valor esperado para cada sujeto
@@ -63,7 +63,7 @@ comp_modelos <- function(base, n, repeticiones){
   library(rms)
   library(generalhoslem)
   
-  # Matrices que guardarán los resultados de las hipótesis planteadas para 2 y 3 tratamientos
+  # Matrices que guardarán los resultados de las comparaciones
   R2_Poisson   <- matrix(0,length(n),repeticiones)
   R2_Logistico <- matrix(0,length(n),repeticiones)
   
@@ -195,7 +195,6 @@ comp_modelos <- function(base, n, repeticiones){
 
   # Base de datos con los resultados
   Base <- as.data.frame(cbind(n = n))
-  
   Base <- mutate(Base,R2_Poisson)
   Base <- mutate(Base,R2_Logistico)
   
@@ -228,7 +227,6 @@ comp_modelos <- function(base, n, repeticiones){
   
   # Retornando los resultados
   return(Resultados = Base)
-  
 }
 
 Comparaciones <- comp_modelos(base = base, n = c(1000, 1500), repeticiones = 100)
